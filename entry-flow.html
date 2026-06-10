@@ -1,0 +1,331 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>Zero Tally — Entry Flow Prototype</title>
+<style>
+  :root {
+    --bg: #0a0a0a;
+    --text: #ffffff;
+    --accent: #ffffff;
+    --dim-time: 0.35s;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { height: 100%; }
+  body {
+    background: #1c1c1e;
+    font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", Helvetica, Arial, sans-serif;
+    display: flex; align-items: center; justify-content: center;
+    min-height: 100vh; padding: 16px;
+  }
+
+  /* Phone frame */
+  .phone {
+    width: 390px; max-width: 100%; height: 800px; max-height: 96vh;
+    background: var(--bg); border-radius: 44px; border: 1px solid #333;
+    overflow: hidden; position: relative; display: flex; flex-direction: column;
+    box-shadow: 0 24px 80px rgba(0,0,0,.6);
+    user-select: none; -webkit-user-select: none;
+  }
+
+  /* A/B toggle */
+  .ab {
+    position: absolute; top: 18px; left: 0; right: 0;
+    display: flex; justify-content: center; gap: 0; z-index: 5;
+  }
+  .ab button {
+    background: none; border: 1px solid rgba(255,255,255,.18); color: rgba(255,255,255,.4);
+    font-size: 9px; letter-spacing: 1.5px; padding: 6px 14px; cursor: pointer;
+    font-weight: 300;
+  }
+  .ab button:first-child { border-radius: 99px 0 0 99px; border-right: none; }
+  .ab button:last-child  { border-radius: 0 99px 99px 0; }
+  .ab button.on { color: var(--bg); background: rgba(255,255,255,.85); border-color: transparent; }
+
+  /* Amount area */
+  .display { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; padding-top: 40px; }
+  .amount {
+    font-size: 92px; font-weight: 100; color: var(--accent);
+    text-shadow: 0 0 28px rgba(255,255,255,.25);
+    line-height: 1; min-height: 96px; display: flex; align-items: center;
+    transition: color .2s;
+  }
+  .amount.placeholder { color: rgba(255,255,255,.28); text-shadow: none; }
+
+  .hint {
+    font-size: 13px; font-weight: 300; letter-spacing: 4px;
+    color: rgba(255,255,255,.35); min-height: 18px; text-align: center;
+    transition: color .25s, opacity .25s;
+  }
+  .hint.armed { color: rgba(255,255,255,.75); }
+  .hint.flash { animation: flash .9s ease; }
+  @keyframes flash {
+    0%, 100% { color: rgba(255,255,255,.35); }
+    25%, 60% { color: rgba(255,255,255,.95); }
+  }
+  .note { font-size: 13px; font-weight: 300; letter-spacing: 1px; color: rgba(255,255,255,.4); }
+
+  /* Recurring pill */
+  .pill-row { display: flex; justify-content: center; padding-bottom: 18px; }
+  .pill {
+    display: flex; align-items: center; gap: 10px;
+    font-size: 10px; letter-spacing: 2px; font-weight: 300;
+    color: rgba(255,255,255,.3); background: rgba(255,255,255,.05);
+    border: none; border-radius: 99px; padding: 10px 20px; cursor: pointer;
+  }
+  .pill.on { color: var(--accent); background: rgba(255,255,255,.12); }
+  .pill .dot { width: 8px; height: 8px; border-radius: 50%; border: 1px solid currentColor; }
+  .pill.on .dot { background: currentColor; }
+
+  /* Category row */
+  .cats {
+    display: flex; gap: 18px; overflow-x: auto; padding: 6px 26px 26px;
+    scrollbar-width: none; transition: opacity var(--dim-time);
+  }
+  .cats::-webkit-scrollbar { display: none; }
+  .cats.dimmed { opacity: .32; }
+
+  .tile {
+    flex: 0 0 82px; height: 82px; border-radius: 18px;
+    background: rgba(255,255,255,.03); border: 1px solid transparent;
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 9px;
+    color: rgba(255,255,255,.42); cursor: pointer; position: relative;
+    transition: background .25s, color .25s, border-color .25s, transform .12s;
+  }
+  .tile:active { transform: scale(.94); }
+  .tile .icon { font-size: 21px; line-height: 1; filter: grayscale(1) brightness(1.6); }
+  .tile .name { font-size: 9px; letter-spacing: 1px; font-weight: 300; }
+  .tile.selected { color: var(--accent); background: rgba(255,255,255,.10); }
+  /* Armed = selected + valid amount: the tile is now visibly the save button */
+  .tile.armed {
+    border-color: rgba(255,255,255,.65);
+    box-shadow: 0 0 18px rgba(255,255,255,.18);
+    animation: breathe 1.6s ease-in-out infinite;
+  }
+  @keyframes breathe {
+    0%, 100% { box-shadow: 0 0 10px rgba(255,255,255,.10); }
+    50%      { box-shadow: 0 0 22px rgba(255,255,255,.30); }
+  }
+  .tile .badge {
+    position: absolute; top: -7px; right: -7px; width: 22px; height: 22px;
+    border-radius: 50%; background: #fff; color: #0a0a0a;
+    font-size: 12px; display: none; align-items: center; justify-content: center;
+    font-weight: 600;
+  }
+  .tile.armed .badge { display: flex; }
+  .tile.shake { animation: shake .4s ease; }
+  @keyframes shake {
+    0%, 100% { transform: translateX(0); }
+    25% { transform: translateX(-5px); } 50% { transform: translateX(5px); } 75% { transform: translateX(-3px); }
+  }
+
+  /* Numpad */
+  .numpad {
+    display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px;
+    padding: 0 48px 44px;
+  }
+  .key {
+    height: 64px; background: none; border: none; cursor: pointer;
+    font-size: 30px; font-weight: 100; color: rgba(255,255,255,.6);
+    border-radius: 50%; transition: color .15s, transform .15s, text-shadow .15s;
+    font-family: inherit;
+  }
+  .key:active { color: var(--accent); transform: scale(1.15); text-shadow: 0 0 16px rgba(255,255,255,.5); }
+  .key.del { font-size: 20px; }
+
+  /* Success overlay */
+  .success {
+    position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+    pointer-events: none; opacity: 0; transition: opacity .25s; z-index: 10;
+  }
+  .success.show { opacity: 1; }
+  .success .halo {
+    position: absolute; width: 220px; height: 220px; border-radius: 50%;
+    background: rgba(255,255,255,.10); filter: blur(46px);
+  }
+  .success .check { font-size: 64px; font-weight: 100; color: var(--accent); position: relative; }
+
+  /* Log of saved rows, for testing */
+  .log {
+    position: absolute; bottom: 8px; left: 0; right: 0; text-align: center;
+    font-size: 9px; letter-spacing: 1px; color: rgba(255,255,255,.25); min-height: 12px;
+  }
+</style>
+</head>
+<body>
+
+<div class="phone">
+  <div class="ab">
+    <button id="modeCurrent">CURRENT</button>
+    <button id="modeRedesign" class="on">REDESIGN</button>
+  </div>
+
+  <div class="display">
+    <div class="amount placeholder" id="amount">0</div>
+    <div class="hint" id="hint">ENTER AMOUNT</div>
+    <div class="note">ADD NOTE</div>
+  </div>
+
+  <div class="pill-row">
+    <button class="pill" id="pill"><span>RECURRING MONTHLY</span><span class="dot"></span></button>
+  </div>
+
+  <div class="cats" id="cats"></div>
+
+  <div class="numpad" id="numpad"></div>
+
+  <div class="success" id="success"><div class="halo"></div><div class="check">✓</div></div>
+  <div class="log" id="log"></div>
+</div>
+
+<script>
+const CATEGORIES = [
+  { name: "FOOD",          icon: "🛒" },
+  { name: "TRANSPORT",     icon: "🚌" },
+  { name: "SHOPPING",      icon: "👜" },
+  { name: "ENTERTAINMENT", icon: "🎮" },
+  { name: "BILLS",         icon: "⚡️" },
+];
+
+let redesign = true;          // A/B switch
+let amountStr = "";
+let selected = null;          // category name or null
+let saving = false;
+
+const $amount = document.getElementById("amount");
+const $hint = document.getElementById("hint");
+const $cats = document.getElementById("cats");
+const $success = document.getElementById("success");
+const $log = document.getElementById("log");
+const $pill = document.getElementById("pill");
+
+// Build tiles
+for (const c of CATEGORIES) {
+  const t = document.createElement("button");
+  t.className = "tile";
+  t.dataset.name = c.name;
+  t.innerHTML = `<span class="badge">✓</span><span class="icon">${c.icon}</span><span class="name">${c.name}</span>`;
+  t.addEventListener("click", () => tapCategory(c.name, t));
+  $cats.appendChild(t);
+}
+
+// Build numpad
+const KEYS = ["1","2","3","4","5","6","7","8","9",".","0","⌫"];
+const $numpad = document.getElementById("numpad");
+for (const k of KEYS) {
+  const b = document.createElement("button");
+  b.className = "key" + (k === "⌫" ? " del" : "");
+  b.textContent = k;
+  b.addEventListener("click", () => pressKey(k));
+  $numpad.appendChild(b);
+}
+
+$pill.addEventListener("click", () => $pill.classList.toggle("on"));
+
+document.getElementById("modeCurrent").addEventListener("click", () => setMode(false));
+document.getElementById("modeRedesign").addEventListener("click", () => setMode(true));
+
+function setMode(on) {
+  redesign = on;
+  document.getElementById("modeCurrent").classList.toggle("on", !on);
+  document.getElementById("modeRedesign").classList.toggle("on", on);
+  render();
+}
+
+function amountValid() {
+  const v = parseFloat(amountStr);
+  return !isNaN(v) && v > 0;
+}
+
+function pressKey(k) {
+  if (saving) return;
+  buzz(8);
+  if (k === "⌫") {
+    amountStr = amountStr.slice(0, -1);
+  } else if (k === ".") {
+    if (!amountStr.includes(".")) amountStr = amountStr === "" ? "0." : amountStr + ".";
+  } else {
+    const dot = amountStr.indexOf(".");
+    if (dot !== -1 && amountStr.length - dot > 2) return;   // max 2 decimals
+    if (dot === -1 && amountStr.length >= 9) return;         // cap whole part
+    amountStr = amountStr === "0" ? k : amountStr + k;
+  }
+  render();
+}
+
+function tapCategory(name, tile) {
+  if (saving) return;
+
+  if (amountValid()) {
+    selected = name;
+    save();
+    return;
+  }
+
+  // Amount not entered yet
+  selected = name;
+  if (redesign) {
+    // Acknowledge the tap, teach the order: gentle shake + hint flash + haptic
+    buzz([12, 40, 12]);
+    tile.classList.remove("shake"); void tile.offsetWidth; // restart animation
+    tile.classList.add("shake");
+    $hint.classList.remove("flash"); void $hint.offsetWidth;
+    $hint.classList.add("flash");
+  }
+  render();
+}
+
+function save() {
+  saving = true;
+  buzz([10, 30, 20]);
+  const v = parseFloat(amountStr).toFixed(amountStr.includes(".") ? 2 : 0);
+  $log.textContent = `LOGGED  $${v} · ${selected}${$pill.classList.contains("on") ? " · RECURRING" : ""}`;
+  $success.classList.add("show");
+  amountStr = "";
+  $pill.classList.remove("on");
+  render();
+  setTimeout(() => {
+    $success.classList.remove("show");
+    saving = false;
+    setTimeout(() => { $log.textContent = ""; }, 2200);
+  }, 800);
+}
+
+function render() {
+  // Amount
+  $amount.textContent = amountStr === "" ? "0" : amountStr;
+  $amount.classList.toggle("placeholder", amountStr === "");
+
+  const valid = amountValid();
+
+  // Hint line (redesign) vs static label (current)
+  if (redesign) {
+    if (!valid && selected)      { $hint.textContent = `ENTER AMOUNT FOR ${selected}`; $hint.classList.remove("armed"); }
+    else if (!valid)             { $hint.textContent = "ENTER AMOUNT"; $hint.classList.remove("armed"); }
+    else if (selected)           { $hint.textContent = `TAP ${selected} AGAIN TO SAVE`; $hint.classList.add("armed"); }
+    else                         { $hint.textContent = "TAP A CATEGORY TO SAVE"; $hint.classList.add("armed"); }
+  } else {
+    $hint.textContent = selected ? selected : "SELECT CATEGORY";
+    $hint.classList.remove("armed");
+  }
+
+  // Category dimming (redesign only)
+  $cats.classList.toggle("dimmed", redesign && !valid);
+
+  // Tile states
+  for (const t of $cats.children) {
+    const isSel = t.dataset.name === selected;
+    t.classList.toggle("selected", isSel);
+    t.classList.toggle("armed", redesign && isSel && valid);
+  }
+}
+
+function buzz(pattern) {
+  if (navigator.vibrate) navigator.vibrate(pattern);
+}
+
+render();
+</script>
+</body>
+</html>
